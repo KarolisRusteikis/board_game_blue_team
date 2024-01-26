@@ -34,9 +34,9 @@ def update_board(window, player_positions, player_names, dice_roll_info, event_i
         for c in range(10):
             pos = r * 10 + c if r % 2 == 0 else r * 10 + (9 - c)
             if pos in skip_turn_steps:
-                color = 'yellow'
-            elif pos in extra_turn_steps:
                 color = 'red'
+            elif pos in extra_turn_steps:
+                color = 'yellow'
             elif pos in special_steps:
                 color = 'pink'
             elif pos in special_steps_result:
@@ -48,9 +48,14 @@ def update_board(window, player_positions, player_names, dice_roll_info, event_i
 
     window['-EVENT-INFO-'].update(event_info)
 
-    window['-DICE-INFO-'].update(f'{player_names[current_player]} rolled the dice:\n'
-                                f'Dice Roll: {dice_roll_info["dice1"]} + {dice_roll_info["dice2"]}\n'
-                                f'Moved from {dice_roll_info["start_pos"] + 1} to {dice_roll_info["end_pos"] + 1}')
+    if dice_roll_info.get("skip_initial_roll", False):
+        window['-DICE-INFO-'].update(f'{player_names[current_player]} will skip the next turn!')
+    elif dice_roll_info.get("skip_next_turn", False):
+        window['-DICE-INFO-'].update(f"{player_names[current_player]}'s turn is skipped!")
+    else:
+        window['-DICE-INFO-'].update(f'{player_names[current_player]} rolled the dice:\n'
+                                     f'Dice Roll: {dice_roll_info["dice1"]} + {dice_roll_info["dice2"]}\n'
+                                     f'Moved from {dice_roll_info["start_pos"] + 1} to {dice_roll_info["end_pos"] + 1}')
 
 
 def main():
@@ -70,8 +75,6 @@ def main():
 
     player_positions = [0, 0]
     current_player = 0
-    extra_rolls = [0, 0]
-    skip_turn = [False, False]
 
     while True:
         event, values = window.read()
@@ -83,53 +86,47 @@ def main():
             event_info = ''
 
             total_dice = 0
-            num_rolls = 1 + extra_rolls[current_player]
-            extra_rolls[current_player] = 0
-
-            for _ in range(num_rolls):
-                dice1, dice2 = roll_dice()
-                total_dice += dice1 + dice2
+            dice1, dice2 = roll_dice()
+            total_dice += dice1 + dice2
 
             start_pos = player_positions[current_player]
-            player_positions[current_player] += total_dice
-            end_pos = player_positions[current_player]
+            end_pos = start_pos + total_dice
 
-            if end_pos == 42:
+            if end_pos in skip_turn_steps:
+                event_info = f'{player_names[current_player]} rolled the dice:\n' \
+                              f'Dice Roll: {dice1} + {dice2}\n' \
+                              f'Moved from {start_pos + 1} to {end_pos + 1}\n' \
+                              f'Next turn will be skipped!'
+                window['-DICE-INFO-'].update(event_info)
+                continue  
+            player_positions[current_player] = min(end_pos, 99)
+
+            if player_positions[current_player] == 42:
                 player_positions[current_player] = 66
                 event_info = f'{player_names[current_player]} teleported to 66!'
-            elif end_pos == 69:
+            elif player_positions[current_player] == 69:
                 player_positions[current_player] = 33
                 event_info = f'{player_names[current_player]} teleported to 33!'
-            elif end_pos in skip_turn_steps:
-                skip_turn[current_player] = True
-                event_info = f'{player_names[current_player]} skipped the turn!'
-            elif end_pos in extra_turn_steps:
-                extra_rolls[current_player] = 1
+            elif player_positions[current_player] in extra_turn_steps:
                 event_info = f'{player_names[current_player]} got an extra turn!\n'
-
-            player_positions[current_player] = min(player_positions[current_player], 99)
 
             update_board(window, player_positions, player_names, {
                 'dice1': dice1,
                 'dice2': dice2,
                 'start_pos': start_pos,
-                'end_pos': end_pos
+                'end_pos': player_positions[current_player],
+                'skip_initial_roll': False,
+                'skip_next_turn': False
             }, event_info)
 
             if player_positions[current_player] >= 99:
                 sg.popup(f'{player_names[current_player]} wins!')
                 window.close()
                 return
-
-            # Switch to the next player after handling the event
             current_player = 1 - current_player
 
-            # Reset skip_turn flag for the next turn
-            skip_turn[0] = False
-            skip_turn[1] = False
-
     window.close()
-    
+
 skip_turn_steps = [15, 35, 55, 75, 95]
 extra_turn_steps = [20, 40, 60, 80]
 
